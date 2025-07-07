@@ -24,7 +24,10 @@ class TextGenerator {
         tokens.forEach { print($0, terminator: " ") }
         fflush(stdout)
 
-        for try await prediction in try pipeline.predict(tokens: tokens, maxNewTokens: maxNewTokens, eosTokenId: tokenizer.eosTokenId) {
+        // Get multiple EOS tokens
+        let eosTokens = getEosTokens(from: tokenizer)
+        
+        for try await prediction in try pipeline.predict(tokens: tokens, maxNewTokens: maxNewTokens, eosTokenIds: eosTokens) {
             predictions.append(prediction)
             print(prediction.newToken, terminator: " ")
             fflush(stdout)
@@ -54,5 +57,38 @@ class TextGenerator {
         let averageThroughput = Measurement(value: throughputs.mean(), unit: UnitDuration.seconds)
         let stdevThroughput = Measurement(value: throughputs.stdev(), unit: UnitDuration.seconds)
         print("                \(averageThroughput.value.formatted(numberFormat)) +/- \(stdevThroughput.value.formatted(numberFormat)) token / sec")
+    }
+    
+    private func getEosTokens(from tokenizer: Tokenizer) -> [Int] {
+        var eosTokens: [Int] = []
+        
+        // Add the standard EOS token
+        if let eosToken = tokenizer.eosTokenId {
+            eosTokens.append(eosToken)
+        }
+        
+        // Add common end-of-sequence tokens
+        let commonEosStrings = [
+            "<|eot_id|>",
+            "<|end_of_text|>",
+            "<|endoftext|>",
+            "</s>",
+            "<|im_end|>"
+        ]
+        
+        for eosString in commonEosStrings {
+            let encoded = tokenizer.encode(text: eosString)
+            if encoded.count == 1 {
+                eosTokens.append(encoded[0])
+            }
+        }
+        
+        // Add common Llama EOS token IDs as fallback
+        let commonEosTokenIds = [128009, 128001, 2] // <|eot_id|>, <|end_of_text|>, </s>
+        eosTokens.append(contentsOf: commonEosTokenIds)
+        
+        print("EOS tokens found: \(eosTokens)")
+        
+        return Array(Set(eosTokens)) // Remove duplicates
     }
 }
