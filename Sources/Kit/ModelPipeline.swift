@@ -72,7 +72,7 @@ class ModelPipeline {
         }
     }
 
-    func predict(tokens initialTokens: [Int], maxNewTokens: Int) throws -> AsyncThrowingStream<Prediction, Error> {
+    func predict(tokens initialTokens: [Int], maxNewTokens: Int, eosTokenId: Int? = nil) throws -> AsyncThrowingStream<Prediction, Error> {
         guard let inferenceConfiguration else {
             throw PipelineError.unsupportedInferenceConfiguration
         }
@@ -139,6 +139,11 @@ class ModelPipeline {
                     tokens.append(newToken)
                     continuation.yield(Prediction(newToken: newToken, allTokens: tokens, latency: timer.elapsed(), promptLatency: promptLatency))
                     promptLatency = nil
+                    
+                    // Check for EOS token
+                    if let eosTokenId = eosTokenId, newToken == eosTokenId {
+                        break
+                    }
                 }
 
                 self.signposter.endInterval("Predict", tokenSignpostState, "\(tokens.last!)")

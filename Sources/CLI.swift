@@ -27,10 +27,10 @@ struct CLI: AsyncParsableCommand {
     var tokenizerName: String?
 
     @Argument(help: "Input text.")
-    var inputText: String = "Several species of shrub of the genus Coffea produce the berries from which coffee is extracted. The two main species commercially cultivated are Coffea canephora"
+    var inputText: String = "Hello who are you?"
 
     @Option(help: "Maximum number of new tokens to generate.")
-    var maxNewTokens: Int = 60
+    var maxNewTokens: Int = 100
 
     @Option(help: "Print verbose logs for debugging.")
     var verbose: Bool = false

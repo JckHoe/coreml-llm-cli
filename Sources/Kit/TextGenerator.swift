@@ -24,7 +24,7 @@ class TextGenerator {
         tokens.forEach { print($0, terminator: " ") }
         fflush(stdout)
 
-        for try await prediction in try pipeline.predict(tokens: tokens, maxNewTokens: maxNewTokens) {
+        for try await prediction in try pipeline.predict(tokens: tokens, maxNewTokens: maxNewTokens, eosTokenId: tokenizer.eosTokenId) {
             predictions.append(prediction)
             print(prediction.newToken, terminator: " ")
             fflush(stdout)
