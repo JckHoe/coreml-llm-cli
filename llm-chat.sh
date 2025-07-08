@@ -17,5 +17,6 @@ echo "---"
 # Run the LLMCLI with test prompts
 swift run LLMCLI \
     --repo-id smpanaro/Llama-3.2-1B-Instruct-CoreML \
+    --output-format json \
     --system-prompt "$SYSTEM_PROMPT" \
     "$USER_PROMPT"
