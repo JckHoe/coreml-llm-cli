@@ -84,7 +84,7 @@ class TextGenerator {
         }
         
         // Add common Llama EOS token IDs as fallback
-        let commonEosTokenIds = [128009, 128001, 2] // <|eot_id|>, <|end_of_text|>, </s>
+        let commonEosTokenIds = [128009, 128001] // <|eot_id|>, <|end_of_text|>
         eosTokens.append(contentsOf: commonEosTokenIds)
         
         print("EOS tokens found: \(eosTokens)")

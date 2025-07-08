@@ -26,11 +26,17 @@ struct CLI: AsyncParsableCommand {
     @Option(help: "Tokenizer name on huggingface.")
     var tokenizerName: String?
 
-    @Argument(help: "Input text.")
-    var inputText: String = "Hello who are you?"
+    @Option(help: "System prompt for the conversation.")
+    var systemPrompt: String?
+    
+    @Option(help: "Single text input (for backward compatibility).")
+    var inputText: String?
+    
+    @Argument(help: "User prompt/question.")
+    var userPrompt: String = "Hello! How can I help you today?"
 
     @Option(help: "Maximum number of new tokens to generate.")
-    var maxNewTokens: Int = 100
+    var maxNewTokens: Int = 2000
 
     @Option(help: "Print verbose logs for debugging.")
     var verbose: Bool = false
@@ -66,7 +72,17 @@ struct CLI: AsyncParsableCommand {
         if verbose { print("Tokenizer \(tokenizerName) loaded.") }
 
         let generator = TextGenerator(pipeline: pipeline, tokenizer: tokenizer)
-        try await generator.generate(text: inputText, maxNewTokens: maxNewTokens)
+        let formattedPrompt: String
+        
+        if let inputText = inputText {
+            // Backward compatibility: treat single input as user prompt
+            formattedPrompt = ChatTemplateFormatter.formatSingleInput(inputText)
+        } else {
+            // New format: use system and user prompts
+            formattedPrompt = ChatTemplateFormatter.formatLlamaPrompt(systemPrompt: systemPrompt, userPrompt: userPrompt)
+        }
+        
+        try await generator.generate(text: formattedPrompt, maxNewTokens: maxNewTokens)
     }
 
     func inferTokenizer() -> String? {
