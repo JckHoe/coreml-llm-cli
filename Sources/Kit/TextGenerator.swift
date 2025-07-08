@@ -47,7 +47,11 @@ class TextGenerator {
             }
         }
         
-        let generatedText = tokenizer.decode(tokens: predictions.last?.allTokens ?? tokens)
+        // Get only the newly generated tokens (exclude input tokens)
+        let allTokens = predictions.last?.allTokens ?? tokens
+        let newTokens = Array(allTokens.suffix(from: tokens.count))
+        let generatedText = tokenizer.decode(tokens: newTokens)
+        let fullText = tokenizer.decode(tokens: allTokens)
         
         if outputFormat == .json {
             outputJSON(
@@ -58,7 +62,7 @@ class TextGenerator {
             )
         } else {
             outputStandard(
-                generatedText: generatedText,
+                generatedText: fullText,
                 loadDuration: loadDuration,
                 predictions: predictions
             )
