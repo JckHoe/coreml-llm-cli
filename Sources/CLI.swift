@@ -40,6 +40,9 @@ struct CLI: AsyncParsableCommand {
 
     @Option(help: "Print verbose logs for debugging.")
     var verbose: Bool = false
+    
+    @Option(help: "Output format: 'standard' or 'json'.")
+    var outputFormat: String = "standard"
 
     mutating func run() async throws {
         var modelDirectory = localModelDirectory
@@ -82,7 +85,8 @@ struct CLI: AsyncParsableCommand {
             formattedPrompt = ChatTemplateFormatter.formatLlamaPrompt(systemPrompt: systemPrompt, userPrompt: userPrompt)
         }
         
-        try await generator.generate(text: formattedPrompt, maxNewTokens: maxNewTokens)
+        let isJsonOutput = outputFormat.lowercased() == "json"
+        try await generator.generate(text: formattedPrompt, maxNewTokens: maxNewTokens, outputFormat: isJsonOutput ? .json : .standard)
     }
 
     func inferTokenizer() -> String? {
