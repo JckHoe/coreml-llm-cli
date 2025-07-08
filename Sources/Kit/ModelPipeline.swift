@@ -6,7 +6,7 @@ import OSLog
 /// has been split across many MLModels.
 class ModelPipeline {
     let chunks: [PipelineChunk]
-    var inferenceConfiguration: PipelineInferenceConfiguration? // Can't retrieve this until models are loaded.
+    var inferenceConfiguration: PipelineInferenceConfiguration?
     let cacheProcessorModel: DeferredModel
     let logitProcessor: LogitProcessor
 
@@ -29,7 +29,6 @@ class ModelPipeline {
         print("Compiling models: ", terminator: "")
         fflush(stdout)
 
-        // No need for signposts, should be fast.
         loadableProcessors.forEach {
             $0.load()
             $0.unload()
@@ -95,12 +94,10 @@ class ModelPipeline {
                 let timer = CodeTimer()
                 let tokenSignpostState = self.signposter.beginInterval("Predict", id: self.signposter.makeSignpostID(), "Token #\(tokens.count)")
 
-                // Do a forward pass of the model.
                 var logitChunks: [MLMultiArray] = []
                 for (i, chunk) in self.chunks.enumerated() {
                     let model = chunk.model!
 
-                    // Wait for the KV cache to be asynchronously updated.
                     try await kvCacheProcessor.wait(forChunk: i)
 
                     let inputs = try arrayStore.featureProvider(forChunk: i, model: model, tokens: tokens)
@@ -111,16 +108,12 @@ class ModelPipeline {
                     let predictState = self.signposter.beginInterval("Predict", id: self.signposter.makeSignpostID(), "Chunk \(i)")
                     let outputs = try await model.prediction(from: inputs, options: options)
                     self.signposter.endInterval("Predict", predictState)
-                    arrayStore.update(outputs: outputs, forChunk: i) // Using output backings should make this ~a noop.
+                    arrayStore.update(outputs: outputs, forChunk: i)
 
-                    // Update the cache (async) each time a full set of input tokens is processed.
-                    // e.g. if the model takes in 64 input tokens at once, update when tokens
-                    // is length 64, 128, 192, etc.
                     if tokens.count % inputLength == 0 {
                         kvCacheProcessor.submit(inputs: inputs, outputs: outputs, forChunk: i)
                     }
 
-                    // Sometimes logits are returned in chunks along the vocab dimension.
                     let logitFeatures = outputs.featureNames
                         .filter { $0.starts(with: "logit") }
                         .sorted { ($0.trailingNumberSuffix() ?? -1) < ($1.trailingNumberSuffix() ?? -1) }
@@ -140,7 +133,6 @@ class ModelPipeline {
                     continuation.yield(Prediction(newToken: newToken, allTokens: tokens, latency: timer.elapsed(), promptLatency: promptLatency))
                     promptLatency = nil
                     
-                    // Check for EOS tokens
                     if !eosTokenIds.isEmpty && eosTokenIds.contains(newToken) {
                         break
                     }
@@ -193,14 +185,12 @@ extension ModelPipeline {
 
         let chunks = chunkFiles.enumerated()
             .filter { (i, _) in
-                // Allow limiting the number of chunks for debugging.
                 if i == 0 || i == chunkFiles.count - 1 { return true }
                 if let chunkLimit { return i <= chunkLimit }
                 return true
             }
             .map { (i, chunkFile) in
             let config = MLModelConfiguration()
-            // The first chunk has operations that cannot run on ANE.
             config.computeUnits = i == 0 ? .cpuOnly : primaryCompute
             config.modelDisplayName = "Chunk \(chunkFile.chunkNumber)"
             return PipelineChunk(fileInfo: chunkFile, configuration: config)
@@ -210,14 +200,12 @@ extension ModelPipeline {
             throw PipelineError.modelChunksNotFound
         }
 
-        // Model for updating KV caches.
         let cacheProcessorURL = folder.appending(component: cacheProcessorModelName)
         let cacheModelConfig = MLModelConfiguration()
         cacheModelConfig.computeUnits = primaryCompute
         cacheModelConfig.modelDisplayName = "Cache Processor"
         let cacheProcessor = DeferredModel(url: cacheProcessorURL, configuration: cacheModelConfig)
 
-        // Model for choosing the next token.
         let logitProcessorURL = folder.appending(component: logitProcessorModelName)
         let logitProcessorModelConfig = MLModelConfiguration()
         logitProcessorModelConfig.computeUnits = primaryCompute
@@ -302,7 +290,6 @@ struct ChunkFileInfo {
     }
 
     var displayModelName: String {
-        // Drop the last _
         String(modelPrefix.prefix(upTo: modelPrefix.index(before: modelPrefix.endIndex)))
     }
 }

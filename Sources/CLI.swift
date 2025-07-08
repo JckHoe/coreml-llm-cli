@@ -65,9 +65,6 @@ struct CLI: AsyncParsableCommand {
             modelPrefix: localModelPrefix,
             cacheProcessorModelName: cacheProcessorModelName,
             logitProcessorModelName: logitProcessorModelName
-            // For debugging.
-//            primaryCompute: .cpuOnly
-//            chunkLimit: 1
         )
         print(pipeline)
 
@@ -78,10 +75,8 @@ struct CLI: AsyncParsableCommand {
         let formattedPrompt: String
         
         if let inputText = inputText {
-            // Backward compatibility: treat single input as user prompt
             formattedPrompt = ChatTemplateFormatter.formatSingleInput(inputText)
         } else {
-            // New format: use system and user prompts
             formattedPrompt = ChatTemplateFormatter.formatLlamaPrompt(systemPrompt: systemPrompt, userPrompt: userPrompt)
         }
         
@@ -118,7 +113,6 @@ struct CLI: AsyncParsableCommand {
             !FileManager.default.fileExists(atPath: $0.path(percentEncoded: false))
         }.count > 0
 
-        // swift-transformers doesn't offer a way to know if we're up to date.
         let newestTimestamp = localFileURLs.filter {
             FileManager.default.fileExists(atPath: $0.path(percentEncoded: false))
         }.compactMap {
@@ -128,7 +122,6 @@ struct CLI: AsyncParsableCommand {
         let lastUploadDate = Date(timeIntervalSince1970: 1723688450)
         let isStale = repoID == "smpanaro/Llama-2-7b-coreml" && newestTimestamp < lastUploadDate
 
-        // I would rather not delete things automatically.
         if isStale {
             print("⚠️ You have an old model downloaded. Please move the following directory to the Trash and try again:")
             print(localURL.path())

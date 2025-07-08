@@ -10,7 +10,6 @@ enum OutputFormat {
 class TextGenerator {
     let pipeline: ModelPipeline
     let tokenizer: Tokenizer
-    // var strategy: Strategy = .argmax // etc.
 
     init(pipeline: ModelPipeline, tokenizer: Tokenizer) {
         self.pipeline = pipeline
@@ -32,7 +31,6 @@ class TextGenerator {
             fflush(stdout)
         }
 
-        // Get multiple EOS tokens
         let eosTokens = getEosTokens(from: tokenizer)
         
         if outputFormat == .standard {
@@ -47,10 +45,11 @@ class TextGenerator {
             }
         }
         
-        // Get only the newly generated tokens (exclude input tokens)
         let allTokens = predictions.last?.allTokens ?? tokens
         let newTokens = Array(allTokens.suffix(from: tokens.count))
-        let generatedText = tokenizer.decode(tokens: newTokens)
+        
+        let filteredNewTokens = removeStopTokens(from: newTokens, eosTokens: eosTokens)
+        let generatedText = tokenizer.decode(tokens: filteredNewTokens)
         let fullText = tokenizer.decode(tokens: allTokens)
         
         if outputFormat == .json {
@@ -137,15 +136,23 @@ class TextGenerator {
         }
     }
     
+    private func removeStopTokens(from tokens: [Int], eosTokens: [Int]) -> [Int] {
+        var filteredTokens = tokens
+        
+        while !filteredTokens.isEmpty && eosTokens.contains(filteredTokens.last!) {
+            filteredTokens.removeLast()
+        }
+        
+        return filteredTokens
+    }
+    
     private func getEosTokens(from tokenizer: Tokenizer) -> [Int] {
         var eosTokens: [Int] = []
         
-        // Add the standard EOS token
         if let eosToken = tokenizer.eosTokenId {
             eosTokens.append(eosToken)
         }
         
-        // Add common end-of-sequence tokens
         let commonEosStrings = [
             "<|eot_id|>",
             "<|end_of_text|>",
@@ -161,10 +168,9 @@ class TextGenerator {
             }
         }
         
-        // Add common Llama EOS token IDs as fallback
-        let commonEosTokenIds = [128009, 128001] // <|eot_id|>, <|end_of_text|>
+        let commonEosTokenIds = [128009, 128001]
         eosTokens.append(contentsOf: commonEosTokenIds)
         
-        return Array(Set(eosTokens)) // Remove duplicates
+        return Array(Set(eosTokens))
     }
 }
