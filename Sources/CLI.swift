@@ -95,6 +95,13 @@ struct CLI: AsyncParsableCommand {
             pipeline.isInteractiveMode = true
             pipeline.isQuiet = quiet
             try pipeline.load()
+            
+            // Signal that models are ready for interactive mode
+            if !quiet {
+                fputs("Ready for input.\n", stderr)
+                fflush(stderr)
+            }
+            
             try await runInteractiveMode(generator: generator)
         } else {
             pipeline.isQuiet = quiet
