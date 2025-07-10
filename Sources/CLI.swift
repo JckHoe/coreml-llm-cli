@@ -136,7 +136,7 @@ struct CLI: AsyncParsableCommand {
                 break
             }
             
-            let formattedPrompt = ChatTemplateFormatter.formatSingleInput(trimmedLine)
+            let formattedPrompt = ChatTemplateFormatter.formatLlamaPrompt(systemPrompt: systemPrompt, userPrompt: trimmedLine)
             try await generator.generateInteractive(text: formattedPrompt, maxNewTokens: maxNewTokens, outputFormat: isJsonOutput ? .json : .standard)
         }
     }
