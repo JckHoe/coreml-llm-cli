@@ -9,6 +9,8 @@ class ModelPipeline {
     var inferenceConfiguration: PipelineInferenceConfiguration?
     let cacheProcessorModel: DeferredModel
     let logitProcessor: LogitProcessor
+    var isInteractiveMode: Bool = false
+    var isQuiet: Bool = false
 
     var loadableProcessors: [Loadable] {
         [cacheProcessorModel, logitProcessor]
@@ -26,8 +28,15 @@ class ModelPipeline {
     /// Load the pipeline gradually to minimize resource usage
     /// during the initial load and model compilation/specialization.
     fileprivate func prewarm() {
-        print("Compiling models: ", terminator: "")
-        fflush(stdout)
+        if !isQuiet {
+            if isInteractiveMode {
+                fputs("Compiling models: ", stderr)
+                fflush(stderr)
+            } else {
+                print("Compiling models: ", terminator: "")
+                fflush(stdout)
+            }
+        }
 
         loadableProcessors.forEach {
             $0.load()
@@ -39,16 +48,36 @@ class ModelPipeline {
                 chunk.load()
                 chunk.unload()
             }
-            print("*", terminator: "")
-            fflush(stdout)
+            if !isQuiet {
+                if isInteractiveMode {
+                    fputs("*", stderr)
+                    fflush(stderr)
+                } else {
+                    print("*", terminator: "")
+                    fflush(stdout)
+                }
+            }
         }
-        print()
+        if !isQuiet {
+            if isInteractiveMode {
+                fputs("\n", stderr)
+            } else {
+                print()
+            }
+        }
     }
 
     func load() throws {
         prewarm()
-        print("Loading models  : ", terminator: "")
-        fflush(stdout)
+        if !isQuiet {
+            if isInteractiveMode {
+                fputs("Loading models  : ", stderr)
+                fflush(stderr)
+            } else {
+                print("Loading models  : ", terminator: "")
+                fflush(stdout)
+            }
+        }
 
         loadableProcessors.forEach {
             $0.load()
@@ -58,10 +87,23 @@ class ModelPipeline {
             signposter.withIntervalSignpost("Prepare", "Load Chunk \(i)") {
                 chunk.load()
             }
-            print("*", terminator: "")
-            fflush(stdout)
+            if !isQuiet {
+                if isInteractiveMode {
+                    fputs("*", stderr)
+                    fflush(stderr)
+                } else {
+                    print("*", terminator: "")
+                    fflush(stdout)
+                }
+            }
         }
-        print()
+        if !isQuiet {
+            if isInteractiveMode {
+                fputs("\n", stderr)
+            } else {
+                print()
+            }
+        }
 
         inferenceConfiguration = .init(from: chunks.compactMap { $0.model })
         if inferenceConfiguration == nil {

@@ -68,6 +68,31 @@ class TextGenerator {
         }
     }
     
+    func generateInteractive(text: String, maxNewTokens: Int, outputFormat: OutputFormat = .standard) async throws {
+        let tokens = tokenizer.encode(text: text)
+        var predictions = [Prediction]()
+        
+        let eosTokens = getEosTokens(from: tokenizer)
+        
+        for try await prediction in try pipeline.predict(tokens: tokens, maxNewTokens: maxNewTokens, eosTokenIds: eosTokens) {
+            predictions.append(prediction)
+        }
+        
+        let allTokens = predictions.last?.allTokens ?? tokens
+        let newTokens = Array(allTokens.suffix(from: tokens.count))
+        
+        let filteredNewTokens = removeStopTokens(from: newTokens, eosTokens: eosTokens)
+        let generatedText = tokenizer.decode(tokens: filteredNewTokens)
+        
+        if outputFormat == .json {
+            outputInteractiveJSON(generatedText: generatedText, predictions: predictions)
+        } else {
+            print(generatedText)
+        }
+        
+        fflush(stdout)
+    }
+    
     private func outputStandard(generatedText: String, loadDuration: Measurement<UnitDuration>, predictions: [Prediction]) {
         print("\n")
         print(generatedText)
@@ -128,6 +153,22 @@ class TextGenerator {
         
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: jsonOutput, options: [.prettyPrinted])
+            if let jsonString = String(data: jsonData, encoding: .utf8) {
+                print(jsonString)
+            }
+        } catch {
+            print("Error serializing JSON: \(error)")
+        }
+    }
+    
+    private func outputInteractiveJSON(generatedText: String, predictions: [Prediction]) {
+        let jsonOutput: [String: Any] = [
+            "generated_text": generatedText,
+            "tokens_generated": predictions.count
+        ]
+        
+        do {
+            let jsonData = try JSONSerialization.data(withJSONObject: jsonOutput, options: [])
             if let jsonString = String(data: jsonData, encoding: .utf8) {
                 print(jsonString)
             }

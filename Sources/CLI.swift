@@ -43,6 +43,12 @@ struct CLI: AsyncParsableCommand {
     
     @Option(help: "Output format: 'standard' or 'json'.")
     var outputFormat: String = "standard"
+    
+    @Flag(help: "Run in interactive mode, reading from STDIN and writing to STDOUT.")
+    var interactive: Bool = false
+    
+    @Flag(help: "Suppress all loading and compilation messages.")
+    var quiet: Bool = false
 
     mutating func run() async throws {
         var modelDirectory = localModelDirectory
@@ -66,12 +72,37 @@ struct CLI: AsyncParsableCommand {
             cacheProcessorModelName: cacheProcessorModelName,
             logitProcessorModelName: logitProcessorModelName
         )
-        print(pipeline)
+        if !quiet {
+            if !interactive {
+                print(pipeline)
+            } else {
+                fputs("\(pipeline)\n", stderr)
+            }
+        }
 
         let tokenizer = try await AutoTokenizer.from(cached: tokenizerName, hubApi: .init(hfToken: HubApi.defaultToken()))
-        if verbose { print("Tokenizer \(tokenizerName) loaded.") }
+        if verbose && !quiet { 
+            if !interactive {
+                print("Tokenizer \(tokenizerName) loaded.")
+            } else {
+                fputs("Tokenizer \(tokenizerName) loaded.\n", stderr)
+            }
+        }
 
         let generator = TextGenerator(pipeline: pipeline, tokenizer: tokenizer)
+        
+        if interactive {
+            pipeline.isInteractiveMode = true
+            pipeline.isQuiet = quiet
+            try pipeline.load()
+            try await runInteractiveMode(generator: generator)
+        } else {
+            pipeline.isQuiet = quiet
+            try await runSingleShotMode(generator: generator)
+        }
+    }
+    
+    private func runSingleShotMode(generator: TextGenerator) async throws {
         let formattedPrompt: String
         
         if let inputText = inputText {
@@ -82,6 +113,25 @@ struct CLI: AsyncParsableCommand {
         
         let isJsonOutput = outputFormat.lowercased() == "json"
         try await generator.generate(text: formattedPrompt, maxNewTokens: maxNewTokens, outputFormat: isJsonOutput ? .json : .standard)
+    }
+    
+    private func runInteractiveMode(generator: TextGenerator) async throws {
+        let isJsonOutput = outputFormat.lowercased() == "json"
+        
+        while let line = readLine() {
+            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            if trimmedLine.isEmpty {
+                continue
+            }
+            
+            if trimmedLine.lowercased() == "quit" || trimmedLine.lowercased() == "exit" {
+                break
+            }
+            
+            let formattedPrompt = ChatTemplateFormatter.formatSingleInput(trimmedLine)
+            try await generator.generateInteractive(text: formattedPrompt, maxNewTokens: maxNewTokens, outputFormat: isJsonOutput ? .json : .standard)
+        }
     }
 
     func inferTokenizer() -> String? {
@@ -106,6 +156,8 @@ struct CLI: AsyncParsableCommand {
         let filenames = try await hub.getFilenames(from: repo, matching: mlmodelcs)
 
         let localURL = hub.localRepoLocation(repo)
+        print(localURL.path())
+
         let localFileURLs = filenames.map {
             localURL.appending(component: $0)
         }
