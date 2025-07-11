@@ -1,0 +1,101 @@
+name: Build Multi-Architecture Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_config:
+        description: 'Build configuration'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+        - debug
+        - release
+
+jobs:
+  build-macos:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-13
+            arch: x86_64
+            target: x86_64-apple-macosx
+          - runner: macos-14
+            arch: arm64
+            target: arm64-apple-macosx
+    
+    runs-on: ${{ matrix.runner }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: '5.9'
+    
+    - name: Build binary
+      run: |
+        if [ "${{ github.event.inputs.build_config }}" = "release" ]; then
+          swift build -c release --arch ${{ matrix.arch }}
+        else
+          swift build --arch ${{ matrix.arch }}
+        fi
+    
+    - name: Copy binary
+      run: |
+        CONFIG="${{ github.event.inputs.build_config }}"
+        if [ "$CONFIG" = "release" ]; then
+          BINARY_PATH=".build/release/LLMCLI"
+        else
+          BINARY_PATH=".build/debug/LLMCLI"
+        fi
+        
+        # Copy binary with architecture suffix
+        cp $BINARY_PATH "LLMCLI-${{ matrix.arch }}"
+    
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: LLMCLI-${{ matrix.arch }}-${{ github.event.inputs.build_config }}
+        path: LLMCLI-${{ matrix.arch }}
+
+  create-universal-binary:
+    needs: build-macos
+    runs-on: macos-14
+    
+    steps:
+    - name: Download x86_64 artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: LLMCLI-x86_64-${{ github.event.inputs.build_config }}
+        path: ./artifacts/x86_64/
+    
+    - name: Download arm64 artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: LLMCLI-arm64-${{ github.event.inputs.build_config }}
+        path: ./artifacts/arm64/
+    
+    - name: Prepare binaries
+      run: |
+        # Binaries are already named with architecture suffix
+        mv artifacts/x86_64/LLMCLI-x86_64 ./
+        mv artifacts/arm64/LLMCLI-arm64 ./
+    
+    - name: Create universal binary
+      run: |
+        lipo -create \
+          LLMCLI-x86_64 \
+          LLMCLI-arm64 \
+          -output LLMCLI-universal
+        
+        # Verify the universal binary
+        lipo -info LLMCLI-universal
+    
+    - name: Upload universal binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: LLMCLI-universal-${{ github.event.inputs.build_config }}
+        path: LLMCLI-universal
