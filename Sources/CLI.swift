@@ -49,6 +49,12 @@ struct CLI: AsyncParsableCommand {
     
     @Flag(help: "Suppress all loading and compilation messages.")
     var quiet: Bool = false
+    
+    @Flag(help: "Enable tool calling functionality.")
+    var enableTools: Bool = false
+    
+    @Option(help: "Comma-separated list of tools to enable (default: all available tools).")
+    var availableTools: String?
 
     mutating func run() async throws {
         var modelDirectory = localModelDirectory
@@ -89,7 +95,39 @@ struct CLI: AsyncParsableCommand {
             }
         }
 
-        let generator = TextGenerator(pipeline: pipeline, tokenizer: tokenizer)
+        // Setup tool manager if tools are enabled
+        var toolManager: ToolManager? = nil
+        if enableTools {
+            toolManager = ToolManager.withDefaultTools()
+            
+            // Filter tools if specific ones are requested
+            if let availableToolsStr = availableTools {
+                let requestedTools = availableToolsStr.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                let allTools = toolManager!.getTools()
+                
+                // Clear all tools and add only requested ones
+                toolManager!.clearTools()
+                
+                for toolName in requestedTools {
+                    if let tool = allTools.first(where: { $0.name == toolName }) {
+                        toolManager!.registerTool(tool)
+                    } else {
+                        print("Warning: Tool '\(toolName)' not found. Available tools: \(allTools.map { $0.name }.joined(separator: ", "))")
+                    }
+                }
+            }
+            
+            if verbose && !quiet {
+                let toolNames = toolManager!.getTools().map { $0.name }.joined(separator: ", ")
+                if !interactive {
+                    print("Tools enabled: \(toolNames)")
+                } else {
+                    fputs("Tools enabled: \(toolNames)\n", stderr)
+                }
+            }
+        }
+
+        let generator = TextGenerator(pipeline: pipeline, tokenizer: tokenizer, toolManager: toolManager)
         
         if interactive {
             pipeline.isInteractiveMode = true
@@ -113,9 +151,17 @@ struct CLI: AsyncParsableCommand {
         let formattedPrompt: String
         
         if let inputText = inputText {
-            formattedPrompt = ChatTemplateFormatter.formatSingleInput(inputText)
+            if enableTools, let toolManager = createToolManager() {
+                formattedPrompt = ChatTemplateFormatter.formatLlamaPromptWithTools(systemPrompt: systemPrompt, userPrompt: inputText, toolManager: toolManager)
+            } else {
+                formattedPrompt = ChatTemplateFormatter.formatSingleInput(inputText)
+            }
         } else {
-            formattedPrompt = ChatTemplateFormatter.formatLlamaPrompt(systemPrompt: systemPrompt, userPrompt: userPrompt)
+            if enableTools, let toolManager = createToolManager() {
+                formattedPrompt = ChatTemplateFormatter.formatLlamaPromptWithTools(systemPrompt: systemPrompt, userPrompt: userPrompt, toolManager: toolManager)
+            } else {
+                formattedPrompt = ChatTemplateFormatter.formatLlamaPrompt(systemPrompt: systemPrompt, userPrompt: userPrompt)
+            }
         }
         
         let isJsonOutput = outputFormat.lowercased() == "json"
@@ -136,9 +182,38 @@ struct CLI: AsyncParsableCommand {
                 break
             }
             
-            let formattedPrompt = ChatTemplateFormatter.formatLlamaPrompt(systemPrompt: systemPrompt, userPrompt: trimmedLine)
+            let formattedPrompt: String
+            if enableTools, let toolManager = createToolManager() {
+                formattedPrompt = ChatTemplateFormatter.formatLlamaPromptWithTools(systemPrompt: systemPrompt, userPrompt: trimmedLine, toolManager: toolManager)
+            } else {
+                formattedPrompt = ChatTemplateFormatter.formatLlamaPrompt(systemPrompt: systemPrompt, userPrompt: trimmedLine)
+            }
+            
             try await generator.generateInteractive(text: formattedPrompt, maxNewTokens: maxNewTokens, outputFormat: isJsonOutput ? .json : .standard)
         }
+    }
+    
+    private func createToolManager() -> ToolManager? {
+        guard enableTools else { return nil }
+        
+        let toolManager = ToolManager.withDefaultTools()
+        
+        // Filter tools if specific ones are requested
+        if let availableToolsStr = availableTools {
+            let requestedTools = availableToolsStr.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            let allTools = toolManager.getTools()
+            
+            // Clear all tools and add only requested ones
+            toolManager.clearTools()
+            
+            for toolName in requestedTools {
+                if let tool = allTools.first(where: { $0.name == toolName }) {
+                    toolManager.registerTool(tool)
+                }
+            }
+        }
+        
+        return toolManager
     }
 
     func inferTokenizer() -> String? {
