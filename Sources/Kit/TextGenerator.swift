@@ -17,12 +17,18 @@ class TextGenerator {
     }
 
     func generate(text: String, maxNewTokens: Int, outputFormat: OutputFormat = .standard) async throws {
+        let functionTimer = CodeTimer()
 
         let loadTimer = CodeTimer()
         try pipeline.load()
         let loadDuration = loadTimer.elapsed()
+        print("Pipeline load time: \(loadDuration.converted(to: .seconds).value.formatted(.number.precision(.fractionLength(3)))) sec")
 
+        // Time tokenization
+        let tokenizeTimer = CodeTimer()
         let tokens = tokenizer.encode(text: text)
+        let tokenizeDuration = tokenizeTimer.elapsed()
+        print("Tokenization time: \(tokenizeDuration.converted(to: .milliseconds).value.formatted(.number.precision(.fractionLength(2)))) ms")
 
         var predictions = [Prediction]()
         
@@ -31,12 +37,18 @@ class TextGenerator {
             fflush(stdout)
         }
 
+        // Time EOS token lookup
+        let eosTimer = CodeTimer()
         let eosTokens = getEosTokens(from: tokenizer)
+        let eosDuration = eosTimer.elapsed()
+        print("EOS token lookup time: \(eosDuration.converted(to: .milliseconds).value.formatted(.number.precision(.fractionLength(2)))) ms")
         
         if outputFormat == .standard {
             print("EOS tokens found: \(eosTokens)")
         }
         
+        // Time prediction loop
+        let predictionTimer = CodeTimer()
         for try await prediction in try pipeline.predict(tokens: tokens, maxNewTokens: maxNewTokens, eosTokenIds: eosTokens) {
             predictions.append(prediction)
             if outputFormat == .standard {
@@ -44,14 +56,22 @@ class TextGenerator {
                 fflush(stdout)
             }
         }
+        let predictionDuration = predictionTimer.elapsed()
+        print("Prediction loop time: \(predictionDuration.converted(to: .seconds).value.formatted(.number.precision(.fractionLength(3)))) sec")
         
+        // Time post-processing
+        let postProcessTimer = CodeTimer()
         let allTokens = predictions.last?.allTokens ?? tokens
         let newTokens = Array(allTokens.suffix(from: tokens.count))
         
         let filteredNewTokens = removeStopTokens(from: newTokens, eosTokens: eosTokens)
         let generatedText = tokenizer.decode(tokens: filteredNewTokens)
         let fullText = tokenizer.decode(tokens: allTokens)
+        let postProcessDuration = postProcessTimer.elapsed()
+        print("Post-processing time: \(postProcessDuration.converted(to: .milliseconds).value.formatted(.number.precision(.fractionLength(2)))) ms")
         
+        // Time output
+        let outputTimer = CodeTimer()
         if outputFormat == .json {
             outputJSON(
                 inputText: text,
@@ -66,29 +86,60 @@ class TextGenerator {
                 predictions: predictions
             )
         }
+        let outputDuration = outputTimer.elapsed()
+        print("Output time: \(outputDuration.converted(to: .milliseconds).value.formatted(.number.precision(.fractionLength(2)))) ms")
+        
+        let functionDuration = functionTimer.elapsed()
+        print("Total generate execution time: \(functionDuration.converted(to: .seconds).value.formatted(.number.precision(.fractionLength(3)))) sec")
     }
     
     func generateInteractive(text: String, maxNewTokens: Int, outputFormat: OutputFormat = .standard) async throws {
+        let functionTimer = CodeTimer()
+        
+        // Time tokenization
+        let tokenizeTimer = CodeTimer()
         let tokens = tokenizer.encode(text: text)
+        let tokenizeDuration = tokenizeTimer.elapsed()
+        print("Tokenization time: \(tokenizeDuration.converted(to: .milliseconds).value.formatted(.number.precision(.fractionLength(2)))) ms")
+        
         var predictions = [Prediction]()
         
+        // Time EOS token lookup
+        let eosTimer = CodeTimer()
         let eosTokens = getEosTokens(from: tokenizer)
+        let eosDuration = eosTimer.elapsed()
+        print("EOS token lookup time: \(eosDuration.converted(to: .milliseconds).value.formatted(.number.precision(.fractionLength(2)))) ms")
         
+        // Time prediction loop
+        let predictionTimer = CodeTimer()
         for try await prediction in try pipeline.predict(tokens: tokens, maxNewTokens: maxNewTokens, eosTokenIds: eosTokens) {
             predictions.append(prediction)
         }
+        let predictionDuration = predictionTimer.elapsed()
+        print("Prediction loop time: \(predictionDuration.converted(to: .seconds).value.formatted(.number.precision(.fractionLength(3)))) sec")
         
+        // Time post-processing
+        let postProcessTimer = CodeTimer()
         let allTokens = predictions.last?.allTokens ?? tokens
         let newTokens = Array(allTokens.suffix(from: tokens.count))
         
         let filteredNewTokens = removeStopTokens(from: newTokens, eosTokens: eosTokens)
         let generatedText = tokenizer.decode(tokens: filteredNewTokens)
+        let postProcessDuration = postProcessTimer.elapsed()
+        print("Post-processing time: \(postProcessDuration.converted(to: .milliseconds).value.formatted(.number.precision(.fractionLength(2)))) ms")
         
+        // Time output
+        let outputTimer = CodeTimer()
         if outputFormat == .json {
             outputInteractiveJSON(generatedText: generatedText, predictions: predictions)
         } else {
             print(generatedText)
         }
+        let outputDuration = outputTimer.elapsed()
+        print("Output time: \(outputDuration.converted(to: .milliseconds).value.formatted(.number.precision(.fractionLength(2)))) ms")
+        
+        let functionDuration = functionTimer.elapsed()
+        print("Total generateInteractive execution time: \(functionDuration.converted(to: .seconds).value.formatted(.number.precision(.fractionLength(3)))) sec")
         
         fflush(stdout)
     }
