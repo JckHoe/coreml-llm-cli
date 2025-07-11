@@ -132,7 +132,7 @@ struct CLI: AsyncParsableCommand {
         if interactive {
             pipeline.isInteractiveMode = true
             pipeline.isQuiet = quiet
-            try pipeline.load()
+            try pipeline.load()  // Load once at startup
             
             // Signal that models are ready for interactive mode
             if !quiet {
@@ -189,6 +189,7 @@ struct CLI: AsyncParsableCommand {
                 formattedPrompt = ChatTemplateFormatter.formatLlamaPrompt(systemPrompt: systemPrompt, userPrompt: trimmedLine)
             }
             
+            // Use generateInteractive but ensure it doesn't maintain state between calls
             try await generator.generateInteractive(text: formattedPrompt, maxNewTokens: maxNewTokens, outputFormat: isJsonOutput ? .json : .standard)
         }
     }

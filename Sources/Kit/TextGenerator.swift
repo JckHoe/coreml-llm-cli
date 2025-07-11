@@ -164,7 +164,10 @@ class TextGenerator {
             return []
         }
         
-        let toolCalls = toolCallParser.parseToolCalls(from: text)
+        var toolCalls = toolCallParser.parseToolCalls(from: text)
+        
+        // Remove duplicate tool calls (same name and parameters)
+        toolCalls = removeDuplicateToolCalls(toolCalls)
         
         if toolCalls.isEmpty {
             return []
@@ -178,6 +181,25 @@ class TextGenerator {
         }
         
         return results
+    }
+    
+    
+    private func removeDuplicateToolCalls(_ toolCalls: [ToolCall]) -> [ToolCall] {
+        var uniqueCalls: [ToolCall] = []
+        var seenCalls: Set<String> = []
+        
+        for toolCall in toolCalls {
+            // Create a unique identifier for this tool call
+            let parametersString = toolCall.parameters.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: "&")
+            let identifier = "\(toolCall.name)|\(parametersString)"
+            
+            if !seenCalls.contains(identifier) {
+                seenCalls.insert(identifier)
+                uniqueCalls.append(toolCall)
+            }
+        }
+        
+        return uniqueCalls
     }
     
     private func outputStandardWithToolCalls(generatedText: String, toolCallResults: [ToolCallResult], loadDuration: Measurement<UnitDuration>, predictions: [Prediction]) {

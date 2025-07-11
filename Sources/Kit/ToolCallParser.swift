@@ -11,12 +11,12 @@ public class ToolCallParser {
         
         // Look for JSON-formatted tool calls in the response
         let patterns = [
-            #"\{"tool_call"\s*:\s*\{[^}]*\}"#,  // {"tool_call": {...}}
-            #"\{"name"\s*:\s*"[^"]*"\s*,\s*"parameters"\s*:\s*\{[^}]*\}"#  // {"name": "...", "parameters": {...}}
+            #"\{"tool_call"\s*:\s*\{[^}]*\}\s*\}"#,  // {"tool_call": {...}}
+            #"\{"name"\s*:\s*"[^"]*"\s*,\s*"parameters"\s*:\s*\{[^}]*\}\s*\}"#  // {"name": "...", "parameters": {...}}
         ]
         
         for pattern in patterns {
-            let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+            let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators])
             let matches = regex?.matches(in: response, options: [], range: NSRange(location: 0, length: response.count)) ?? []
             
             for match in matches {
@@ -28,6 +28,11 @@ public class ToolCallParser {
                     }
                 }
             }
+        }
+        
+        // If no structured tool calls found, try to extract from any JSON-like structure
+        if toolCalls.isEmpty {
+            toolCalls.append(contentsOf: extractToolCallsFromAnyJSON(response))
         }
         
         return toolCalls
@@ -105,6 +110,37 @@ public class ToolCallParser {
         }
         
         return nil
+    }
+    
+    /// Extract tool calls from any JSON structure in the response
+    private func extractToolCallsFromAnyJSON(_ response: String) -> [ToolCall] {
+        var toolCalls: [ToolCall] = []
+        
+        // Look for any JSON object that might contain tool information
+        let jsonPattern = #"\{[^{}]*\}"#
+        let regex = try? NSRegularExpression(pattern: jsonPattern, options: [.caseInsensitive])
+        let matches = regex?.matches(in: response, options: [], range: NSRange(location: 0, length: response.count)) ?? []
+        
+        for match in matches {
+            let matchRange = match.range
+            if let range = Range(matchRange, in: response) {
+                let jsonString = String(response[range])
+                
+                // Try to parse as JSON and look for tool-related keys
+                if let jsonData = jsonString.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                    
+                    // Check if this looks like a tool call attempt
+                    if json.keys.contains(where: { $0.lowercased().contains("tool") || $0.lowercased().contains("name") }) {
+                        if let toolCall = parseToolCallFromDictionary(json) {
+                            toolCalls.append(toolCall)
+                        }
+                    }
+                }
+            }
+        }
+        
+        return toolCalls
     }
     
     /// Check if a response contains tool calls

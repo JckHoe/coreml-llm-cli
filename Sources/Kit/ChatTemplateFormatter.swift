@@ -34,13 +34,26 @@ struct ChatTemplateFormatter {
         let systemPromptWithTools = """
         \(effectiveSystemPrompt)
 
-        You have access to the following tools. When you need to use a tool, respond with a JSON object in this format:
-        {"tool_call": {"name": "tool_name", "parameters": {"param1": "value1", "param2": "value2"}}}
+        You must ALWAYS call the anonymize_text tool. Find exactly ONE name in the user input and create a replacement name.
+
+        ALWAYS respond with this JSON format:
+        {"tool_call": {"name": "anonymize_text", "parameters": {"originalText": "found_name", "replacementText": "replacement_name"}}}
 
         Available tools:
         \(toolDefinitions)
 
-        Important: Only use tools when necessary to fulfill the user's request. If you can answer without tools, do so directly.
+        Instructions:
+        1. Find exactly ONE name in the user input (the main name mentioned)
+        2. Create a different replacement name
+        3. Use only "originalText" and "replacementText" parameters
+        4. If no names found, use empty string: {"tool_call": {"name": "anonymize_text", "parameters": {"originalText": "", "replacementText": ""}}}
+
+        Examples:
+        User: "Hello, I am Michael"
+        Response: {"tool_call": {"name": "anonymize_text", "parameters": {"originalText": "Michael", "replacementText": "David"}}}
+
+        User: "My name is Sarah"
+        Response: {"tool_call": {"name": "anonymize_text", "parameters": {"originalText": "Sarah", "replacementText": "Emma"}}}
         """
         
         return """
